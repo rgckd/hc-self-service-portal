@@ -1,301 +1,163 @@
-# HC Self-Service Portal - Deployment Guide
+# HC Self-Service Portal
 
-## 📋 Overview
+A Google Apps Script web application for Heartful Communication (HC) Essentials Program participants to submit requests.
 
-The HC Self-Service Portal is a web application for the Heartful Communication (HC) Essentials program that allows users to:
-- Select active programs (filtered by date validity)
-- Verify their email registration
-- Select and submit service requests
-- All with built-in security (reCAPTCHA v3 + honeypot)
+## Architecture
 
-## 🏗️ Architecture
+This application runs **entirely within Google Apps Script** as a single-origin web app. No CORS configuration needed.
 
-- **Frontend**: Static HTML + Vanilla JavaScript
-- **Backend**: Google Apps Script (Web App)
-- **Storage**: Google Sheets
-- **Security**: reCAPTCHA v3 + Honeypot field
-- **Hosting**: GitHub Pages / Google Sites / Any static host
+- **Frontend**: Served via `doGet()` using HtmlService from `Index.html`
+- **Backend**: Handled via `doPost()` in `Webapp.gs`
+- **Same Origin**: Frontend POSTs to same URL it's served from - no cross-origin requests
 
----
+## Features
 
-## 📦 What You Need
+- ✅ Program selection with date-based validity
+- ✅ Email verification against registration sheets
+- ✅ Dynamic request loading based on date validity
+- ✅ Multiple request selection
+- ✅ reCAPTCHA v3 spam protection
+- ✅ Honeypot anti-bot field
+- ✅ Registration redirect for unregistered users
+- ✅ Responsive design
 
-### 1. Google Sheets Structure
+## Deployment Steps
 
-#### **Portal MASTER Sheet**
-Create a Google Sheet with these columns:
+### 1. Create Google Apps Script Project
 
-| Column | Description | Example |
-|--------|-------------|---------|
-| `Group` | Program identifier | `HC Essentials 2024` |
-| `Record_Type` | Type: `PROGRAM`, `REQUEST`, `REGISTER`, `REGFORM` | `PROGRAM` |
-| `Record_Name` | Display name | `Certificate Request` |
-| `Valid_From` | Start date (optional) | `2024-01-01` |
-| `Valid_Till` | End date (optional) | `2024-12-31` |
-| `Content` | URL for `REGISTER`/`REGFORM` types | Sheet/Form URL |
+1. Go to [script.google.com](https://script.google.com)
+2. Create a new project
+3. Name it "HC Self-Service Portal"
 
-**Example Data:**
+### 2. Add Files to Apps Script
 
-| Group | Record_Type | Record_Name | Valid_From | Valid_Till | Content |
-|-------|-------------|-------------|------------|------------|---------|
-| HC Essentials 2024 | PROGRAM | HC Essentials 2024 | 2024-01-01 | 2024-12-31 | |
-| HC Essentials 2024 | REGISTER | Registered Users | 2024-01-01 | 2024-12-31 | https://docs.google.com/spreadsheets/d/abc123 |
-| HC Essentials 2024 | REGFORM | Registration Form | 2024-01-01 | 2024-12-31 | https://forms.gle/xyz789 |
-| HC Essentials 2024 | REQUEST | Certificate Request | 2024-01-01 | 2024-12-31 | |
-| HC Essentials 2024 | REQUEST | Resource Access | 2024-01-01 | 2024-12-31 | |
+Copy the contents of these files to your Apps Script project:
 
-#### **Registration Sheet** (referenced by REGISTER records)
-Simple sheet with email addresses in the first column:
+- `Webapp.gs` → Create as "Webapp.gs" (Script file)
+- `Index.html` → Create as "Index.html" (HTML file)
+- `HCProdWrapper.gs` → Create as "HCProdWrapper.gs" (Script file - optional)
 
-| Email |
-|-------|
-| user1@example.com |
-| user2@example.com |
+**Important**: The HTML file in Apps Script must be named exactly `Index.html` (capital I).
 
-#### **Requests Output Sheet**
-Where submissions are stored:
+### 3. Configure Script Properties
 
-| Timestamp | Program | Email | Requests |
-|-----------|---------|-------|----------|
-| (auto) | (auto) | (auto) | (auto) |
+1. In Apps Script, go to **Project Settings** (gear icon)
+2. Click **Script Properties** → **Add script property**
+3. Add: `RECAPTCHA_SECRET` = `your-recaptcha-secret-key`
 
-### 2. reCAPTCHA v3 Keys
+### 4. Bind to Spreadsheet
 
-1. Go to [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
-2. Create a new site:
-   - **Label**: HC Self-Service Portal
-   - **reCAPTCHA type**: v3
-   - **Domains**: Add your hosting domain (e.g., `yourusername.github.io`)
-3. Save your:
-   - **Site Key** (for frontend)
-   - **Secret Key** (for backend)
+1. In Apps Script, click **Project Settings**
+2. Under **Google Cloud Platform (GCP) Project**, link to your GCP project
+3. Or use the standalone deployment (recommended)
 
----
+The script expects a spreadsheet with these sheets:
+- `MASTER` - Contains program, request, and registration configurations
+- `NewPortalRequests` - Where form submissions are saved
 
-## 🚀 Step-by-Step Deployment
+### 5. Deploy as Web App
 
-### **Step 1: Set Up Google Apps Script**
-
-1. Open your **Portal MASTER** Google Sheet
-2. Go to **Extensions** → **Apps Script**
-3. Delete any default code in `Code.gs`
-4. Copy and paste the entire contents of `Code.gs` from this project
-5. Update the configuration at the top:
-
-```javascript
-const CONFIG = {
-  MASTER_SHEET_ID: 'YOUR_MASTER_SHEET_ID',      // From URL of Portal MASTER
-  OUTPUT_SHEET_ID: 'YOUR_OUTPUT_SHEET_ID',      // Where submissions go
-  MASTER_SHEET_NAME: 'Portal MASTER',           // Sheet tab name
-  OUTPUT_SHEET_NAME: 'Requests',                // Output sheet tab name
-  RECAPTCHA_SECRET: 'YOUR_RECAPTCHA_SECRET_KEY',
-  RECAPTCHA_THRESHOLD: 0.5
-};
-```
-
-6. **Save** the project (give it a name like "HC Portal Backend")
-
-7. **Deploy as Web App**:
-   - Click **Deploy** → **New deployment**
-   - Type: **Web app**
-   - Description: `HC Portal v1`
+1. Click **Deploy** → **New deployment**
+2. Select type: **Web app**
+3. Configure:
+   - Description: "HC Self-Service Portal v1"
    - Execute as: **Me**
    - Who has access: **Anyone**
-   - Click **Deploy**
-   - **Authorize** the app when prompted
-   - **Copy the Web App URL** (you'll need this for the frontend)
+4. Click **Deploy**
+5. **Copy the Web App URL** - this is your portal URL
 
-### **Step 2: Configure Frontend Files**
+### 6. Test the Deployment
 
-1. Open `script.js`
-2. Update the configuration:
+1. Open the Web App URL in a browser
+2. The HTML interface should load from the same origin
+3. Test:
+   - Program loading
+   - Email verification
+   - Request selection
+   - Form submission
 
-```javascript
-const CONFIG = {
-    API_URL: 'YOUR_APPS_SCRIPT_WEB_APP_URL',  // Paste URL from Step 1
-    RECAPTCHA_SITE_KEY: 'YOUR_RECAPTCHA_SITE_KEY'  // From reCAPTCHA admin
-};
-```
+## MASTER Sheet Structure
 
-3. Open `index.html` (line 10)
-4. Replace the reCAPTCHA script URL:
+The `MASTER` sheet should have these columns:
 
-```html
-<script src="https://www.google.com/recaptcha/api.js?render=YOUR_RECAPTCHA_SITE_KEY"></script>
-```
+| Record_Type | Record_Name | Group | Content | Valid_From | Valid_Till |
+|------------|-------------|-------|---------|------------|------------|
+| PROGRAM | HC Essentials 2024 | | | 2024-01-01 | 2024-12-31 |
+| REGISTER | Registration Sheet | HC Essentials 2024 | https://docs.google.com/spreadsheets/d/SHEET_ID | | |
+| REGFORM | Registration Form | HC Essentials 2024 | https://forms.gle/FORM_ID | 2024-01-01 | 2024-06-30 |
+| REQUEST | Certificate Request | HC Essentials 2024 | | 2024-01-01 | 2024-12-31 |
+| REQUEST | Transcript Request | HC Essentials 2024 | | 2024-01-01 | 2024-12-31 |
 
-### **Step 3: Host the Frontend**
+### Record Types:
+- **PROGRAM**: Active programs to show in dropdown
+- **REGISTER**: Spreadsheet URL containing registered emails
+- **REGFORM**: Registration form URL (shown when email not found)
+- **REQUEST**: Available requests for a program
 
-#### **Option A: GitHub Pages** (Recommended)
+## Same-Origin Execution
 
-1. Create a new GitHub repository
-2. Upload these files:
-   - `index.html`
-   - `script.js`
-3. Go to **Settings** → **Pages**
-4. Source: Deploy from branch `main`
-5. Your site will be at: `https://yourusername.github.io/repository-name`
+The application eliminates CORS entirely by:
 
-#### **Option B: Google Sites**
+1. **doGet()** serves the HTML interface via HtmlService
+2. **Frontend JavaScript** POSTs to `window.location.href` (same origin)
+3. **doPost()** handles all API requests
+4. **No CORS headers** needed - browser doesn't enforce CORS for same-origin
 
-1. Create a new Google Site
-2. Add an **Embed** component
-3. Use **Embed code** and paste the entire `index.html` content
-4. Upload `script.js` to Google Drive and link it
+## Local Development Files
 
-#### **Option C: Any Static Host**
+These files are for version control only and are NOT deployed:
 
-Upload `index.html` and `script.js` to:
-- Netlify
-- Vercel
-- Firebase Hosting
-- Your own web server
+- `index.html` - Local copy for editing (lowercase)
+- `script.js` - Separate JS file (embedded in Index.html)
+- `README.md` - This file
+- `appsscript.json` - Apps Script manifest
 
----
+The actual deployment file is `Index.html` (capital I) which you copy to Apps Script.
 
-## ✅ Testing
+## Security Features
 
-### Test the Backend (Optional)
+1. **reCAPTCHA v3** - Verifies user is not a bot
+2. **Honeypot field** - Hidden field to catch bots
+3. **Email verification** - Checks registration before allowing requests
+4. **Date-based validity** - Programs and requests are time-bound
+5. **Server-side validation** - All checks performed in Apps Script
 
-In Apps Script editor:
+## Maintenance
 
-1. Select function `testGetPrograms`
-2. Click **Run**
-3. Check **Execution log** for results
+### Update Programs/Requests
+Edit the MASTER sheet - changes take effect immediately
 
-### Test the Frontend
+### Redeploy
+1. Make changes in Apps Script
+2. Deploy → **Manage deployments**
+3. Click ✏️ on your deployment
+4. Change version to **New version**
+5. Click **Deploy**
 
-1. Open your hosted page
-2. **Test Program Loading**:
-   - Should see active programs in dropdown
-3. **Test Email Verification**:
-   - Enter registered email → should verify
-   - Enter unregistered email → should show registration link (if available)
-4. **Test Request Submission**:
-   - Select program
-   - Verify email
-   - Select requests
-   - Submit
-   - Check output sheet for new row
+### View Logs
+- In Apps Script: **Executions** tab shows all doGet/doPost calls
+- Check for errors in submission processing
 
----
+## Troubleshooting
 
-## 🔧 Troubleshooting
+**Programs not loading?**
+- Check MASTER sheet has PROGRAM records
+- Verify Valid_From/Valid_Till dates
 
-### Programs Not Loading
-- Check `MASTER_SHEET_ID` in `Code.gs`
-- Verify `Record_Type = "PROGRAM"` exists
-- Check that programs have valid dates
-- Open browser console for errors
+**Email verification failing?**
+- Check REGISTER record has correct sheet URL
+- Verify registration sheet is accessible
+- Email must be in first column
 
-### Email Verification Fails
-- Verify `REGISTER` record exists with correct sheet URL
-- Check that registration sheet has emails in column A
-- Ensure sheet permissions allow script access
+**Requests not showing?**
+- Verify REQUEST records exist for the program
+- Check Valid_From/Valid_Till dates
 
-### Submissions Not Appearing
-- Check `OUTPUT_SHEET_ID` in `Code.gs`
-- Verify sheet name matches `OUTPUT_SHEET_NAME`
+**Form submission failing?**
+- Check RECAPTCHA_SECRET is set in Script Properties
+- Verify NewPortalRequests sheet exists
 - Check Apps Script execution logs
 
-### reCAPTCHA Errors
-- Verify site key matches domain
-- Check secret key in backend
-- Ensure reCAPTCHA type is v3 (not v2)
+## Support
 
-### CORS Errors
-- Apps Script Web App must be deployed as "Anyone"
-- Clear browser cache
-- Redeploy Apps Script with new version
-
----
-
-## 🔒 Security Features
-
-1. **reCAPTCHA v3**: Scores user interactions (0.0-1.0)
-2. **Honeypot Field**: Hidden field that bots tend to fill
-3. **Server-side Validation**: All checks happen in backend
-4. **Date-based Access Control**: Automatic validity checking
-
----
-
-## 📊 Date Validity Logic
-
-Records are considered **VALID** if:
-
-```
-(Valid_From is blank OR Valid_From ≤ today)
-AND
-(Valid_Till is blank OR Valid_Till ≥ today)
-```
-
-**Examples**:
-- `Valid_From: blank, Valid_Till: blank` → Always valid
-- `Valid_From: 2024-01-01, Valid_Till: blank` → Valid from Jan 1, 2024 onward
-- `Valid_From: blank, Valid_Till: 2024-12-31` → Valid until Dec 31, 2024
-- `Valid_From: 2024-01-01, Valid_Till: 2024-12-31` → Valid only in 2024
-
----
-
-## 📝 Customization
-
-### Change Styling
-
-Edit the `<style>` section in `index.html`:
-- Colors: Update gradient, button colors
-- Layout: Adjust `.container` width, padding
-- Fonts: Change `font-family`
-
-### Add Form Fields
-
-1. Add HTML input in `index.html`
-2. Update `handleFormSubmit()` in `script.js`
-3. Update `submitRequest()` in `Code.gs`
-4. Add column to output sheet
-
-### Change Threshold
-
-Adjust reCAPTCHA sensitivity in `Code.gs`:
-```javascript
-RECAPTCHA_THRESHOLD: 0.5  // 0.0 (lenient) to 1.0 (strict)
-```
-
----
-
-## 🆘 Support
-
-For issues:
-1. Check browser console (F12)
-2. Check Apps Script execution logs
-3. Verify all IDs and keys are correct
-4. Test with sample data first
-
----
-
-## 📄 File Summary
-
-| File | Purpose |
-|------|---------|
-| `index.html` | Portal UI structure and styling |
-| `script.js` | Frontend logic and API calls |
-| `Code.gs` | Google Apps Script backend |
-| `README.md` | This deployment guide |
-
----
-
-## ✨ Features Implemented
-
-- ✅ Dynamic program loading with date filtering
-- ✅ Email verification with registration link fallback
-- ✅ Dynamic request selection
-- ✅ reCAPTCHA v3 integration
-- ✅ Honeypot bot detection
-- ✅ Responsive design
-- ✅ Error handling and user feedback
-- ✅ Date-based validity checking (Valid_From/Valid_Till)
-- ✅ Case-insensitive email matching
-- ✅ Automatic timestamp on submission
-
----
-
-**Built with ❤️ for the Heartful Communication Essentials Program**
+For issues or questions, check the Apps Script execution logs and verify all configuration steps.
