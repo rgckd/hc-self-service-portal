@@ -23,6 +23,30 @@ const CONFIG = {
 };
 
 // ========================================
+// HELPER FUNCTIONS FOR JSON RESPONSES
+// ========================================
+
+/**
+ * Create a JSON response object
+ * @param {Object} obj - Object to return as JSON
+ * @returns {TextOutput} ContentService JSON response
+ */
+function jsonResponse(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Create a JSON error response
+ * @param {string} message - Error message
+ * @returns {TextOutput} ContentService JSON response with success: false
+ */
+function jsonError(message) {
+  return jsonResponse({ success: false, message: message });
+}
+
+// ========================================
 // MAIN ENTRY POINT
 // ========================================
 
@@ -39,73 +63,244 @@ function doGet(e) {
 
 /**
  * Handle POST requests from the frontend
+ * ALWAYS returns JSON via ContentService in every code path
  * @param {Object} e - Event object containing request data
- * @returns {TextOutput} JSON response
+ * @returns {TextOutput} JSON response (ContentService)
  */
 function doPost(e) {
   try {
+    Logger.log('doPost called with action: ' + (e.parameter.action || 'NONE'));
+    
     // Check for honeypot (anti-spam)
     if (e.parameter.honey && e.parameter.honey.length > 0) {
-      Logger.log('Honeypot triggered');
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          success: false,
-          message: 'Submission blocked'
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
+      Logger.log('Honeypot triggered - blocking request');
+      return jsonError('Submission blocked');
     }
     
     // Get action from form parameters
     const action = e.parameter.action;
     
-    // Route to appropriate handler
-    let response;
+    // Validate action exists
+    if (!action) {
+      Logger.log('Missing action parameter');
+      return jsonError('Missing action parameter');
+    }
     
+    Logger.log('Processing action: ' + action);
+    
+    // Route to appropriate handler - EACH MUST RETURN JSON
     switch (action) {
       case 'getPrograms':
-        response = getPrograms();
-        break;
+        return handleGetPrograms();
         
       case 'verifyEmail':
-        response = verifyEmail(e.parameter.program, e.parameter.email);
-        break;
+        return handleVerifyEmail(e.parameter.program, e.parameter.email);
         
       case 'getRequests':
-        response = getRequests(e.parameter.program);
-        break;
+        return handleGetRequests(e.parameter.program);
         
       case 'submitRequest':
         // Handle multiple requests array
         const requests = e.parameter.requests;
-        const requestsArray = Array.isArray(requests) ? requests : [requests];
-        response = submitRequest(
+        const requestsArray = Array.isArray(requests) ? requests : (requests ? [requests] : []);
+        return handleSubmitRequest(
           e.parameter.program,
           e.parameter.email,
           requestsArray,
           e.parameter.recaptchaToken
         );
-        break;
         
       default:
-        response = {
-          success: false,
-          message: 'Invalid action specified'
-        };
+        Logger.log('Unknown action: ' + action);
+        return jsonError('Unknown action: ' + action);
     }
     
-    return ContentService
-      .createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    Logger.log('doPost error: ' + error.toString());
+  } catch (err) {
+    Logger.log('doPost EXCEPTION: ' + err.toString() + ' | ' + err.stack);
+    return jsonError('Server error: ' + err.message);
+  }
+}
+
+// ========================================
+// ACTION HANDLERS (ALL RETURN JSON OBJECTS)
+// ========================================
+
+/**
+ * Handle getPrograms action
+ * @returns {TextOutput} JSON response
+ */
+function handleGetPrograms() {
+  try {
+    const masterData = getMasterSheetData();
+    const programs = [];
     
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        message: 'Server error: ' + error.message
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
+    // Filter for valid PROGRAM records
+    masterData.forEach(row => {
+      if (row.Record_Type === 'PROGRAM' && 
+          isRecordValid(row.Valid_From, row.Valid_Till)) {
+        programs.push(row.Record_Name);
+      }
+    });
+    
+    Logger.log('Found ' + programs.length + ' valid programs');
+    return jsonResponse({
+      success: true,
+      programs: programs
+    });
+    
+  } catch (error) {
+    Logger.log('handleGetPrograms error: ' + error.toString());
+    return jsonError('Error loading programs: ' + error.message);
+  }
+}
+
+/**
+ * Handle verifyEmail action
+ * @returns {TextOutput} JSON response
+ */
+function handleVerifyEmail(program, email) {
+  try {
+    if (!program || !email) {
+      return jsonError('Program and email are required');
+    }
+    
+    const masterData = getMasterSheetData();
+    
+    // Find valid REGISTER record for this program
+    let registerRecord = null;
+    masterData.forEach(row => {
+      if (row.Group === program && 
+          row.Record_Type === 'REGISTER' &&
+          isRecordValid(row.Valid_From, row.Valid_Till)) {
+        registerRecord = row;
+      }
+    });
+    
+    if (!registerRecord || !registerRecord.Content) {
+      return jsonError('Registration sheet not found for this program');
+    }
+    
+    // Extract Sheet ID from URL
+    const sheetId = extractSheetId(registerRecord.Content);
+    if (!sheetId) {
+      return jsonError('Invalid registration sheet URL');
+    }
+    
+    // Check if email exists in registration sheet
+    const isRegistered = checkEmailInSheet(sheetId, email);
+    
+    if (isRegistered) {
+      Logger.log('Email verified: ' + email);
+      return jsonResponse({
+        success: true,
+        registered: true
+      });
+    } else {
+      // Email not found - check if registration form is available
+      let regFormUrl = null;
+      
+      masterData.forEach(row => {
+        if (row.Group === program && 
+            row.Record_Type === 'REGFORM' &&
+            isRecordValid(row.Valid_From, row.Valid_Till)) {
+          regFormUrl = row.Content;
+        }
+      });
+      
+      Logger.log('Email not found, registration form available: ' + (regFormUrl ? 'yes' : 'no'));
+      return jsonResponse({
+        success: true,
+        registered: false,
+        registrationUrl: regFormUrl || null
+      });
+    }
+    
+  } catch (error) {
+    Logger.log('handleVerifyEmail error: ' + error.toString());
+    return jsonError('Error verifying email: ' + error.message);
+  }
+}
+
+/**
+ * Handle getRequests action
+ * @returns {TextOutput} JSON response
+ */
+function handleGetRequests(program) {
+  try {
+    if (!program) {
+      return jsonError('Program is required');
+    }
+    
+    const masterData = getMasterSheetData();
+    const requests = [];
+    
+    // Filter for valid REQUEST records for this program
+    masterData.forEach(row => {
+      if (row.Group === program && 
+          row.Record_Type === 'REQUEST' &&
+          isRecordValid(row.Valid_From, row.Valid_Till)) {
+        requests.push(row.Record_Name);
+      }
+    });
+    
+    Logger.log('Found ' + requests.length + ' valid requests for program: ' + program);
+    return jsonResponse({
+      success: true,
+      requests: requests
+    });
+    
+  } catch (error) {
+    Logger.log('handleGetRequests error: ' + error.toString());
+    return jsonError('Error loading requests: ' + error.message);
+  }
+}
+
+/**
+ * Handle submitRequest action
+ * @returns {TextOutput} JSON response
+ */
+function handleSubmitRequest(program, email, requests, recaptchaToken) {
+  try {
+    // Validate inputs
+    if (!program || !email || !requests || requests.length === 0) {
+      return jsonError('All fields are required');
+    }
+    
+    // Verify reCAPTCHA
+    if (!verifyRecaptcha(recaptchaToken)) {
+      Logger.log('reCAPTCHA verification failed for: ' + email);
+      return jsonError('Security verification failed. Please try again.');
+    }
+    
+    // Append to output sheet
+    const outputSheet = SpreadsheetApp.getActiveSpreadsheet()
+      .getSheetByName(CONFIG.OUTPUT_SHEET_NAME);
+    
+    if (!outputSheet) {
+      return jsonError('Output sheet not found');
+    }
+    
+    // Prepare row data
+    const timestamp = new Date();
+    const requestsText = requests.join(', ');
+    
+    // Append row: [Timestamp, Program, Email, Requests]
+    outputSheet.appendRow([
+      timestamp,
+      program,
+      email,
+      requestsText
+    ]);
+    
+    Logger.log('Request submitted by ' + email + ' for program ' + program);
+    return jsonResponse({
+      success: true,
+      message: 'Request submitted successfully'
+    });
+    
+  } catch (error) {
+    Logger.log('handleSubmitRequest error: ' + error.toString());
+    return jsonError('Error submitting request: ' + error.message);
   }
 }
 
@@ -228,221 +423,7 @@ function verifyRecaptcha(token) {
 // ========================================
 // ACTION HANDLERS
 // ========================================
-
-/**
- * Get list of valid programs
- * @returns {Object} Response with program list
- */
-function getPrograms() {
-  try {
-    const masterData = getMasterSheetData();
-    const programs = [];
-    
-    // Filter for valid PROGRAM records
-    masterData.forEach(row => {
-      if (row.Record_Type === 'PROGRAM' && 
-          isRecordValid(row.Valid_From, row.Valid_Till)) {
-        programs.push(row.Record_Name);
-      }
-    });
-    
-    return {
-      success: true,
-      programs: programs
-    };
-    
-  } catch (error) {
-    Logger.log('getPrograms error: ' + error.toString());
-    return {
-      success: false,
-      message: 'Error loading programs'
-    };
-  }
-}
-
-/**
- * Verify if email is registered for a program
- * @param {string} program - Program name
- * @param {string} email - Email address to verify
- * @returns {Object} Response with verification result
- */
-function verifyEmail(program, email) {
-  try {
-    if (!program || !email) {
-      return {
-        success: false,
-        message: 'Program and email are required'
-      };
-    }
-    
-    const masterData = getMasterSheetData();
-    
-    // Find valid REGISTER record for this program
-    let registerRecord = null;
-    masterData.forEach(row => {
-      if (row.Group === program && 
-          row.Record_Type === 'REGISTER' &&
-          isRecordValid(row.Valid_From, row.Valid_Till)) {
-        registerRecord = row;
-      }
-    });
-    
-    if (!registerRecord || !registerRecord.Content) {
-      return {
-        success: false,
-        message: 'Registration sheet not found for this program'
-      };
-    }
-    
-    // Extract Sheet ID from URL
-    const sheetId = extractSheetId(registerRecord.Content);
-    if (!sheetId) {
-      return {
-        success: false,
-        message: 'Invalid registration sheet URL'
-      };
-    }
-    
-    // Check if email exists in registration sheet
-    const isRegistered = checkEmailInSheet(sheetId, email);
-    
-    if (isRegistered) {
-      return {
-        success: true,
-        registered: true
-      };
-    } else {
-      // Email not found - check if registration form is available
-      let regFormUrl = null;
-      
-      masterData.forEach(row => {
-        if (row.Group === program && 
-            row.Record_Type === 'REGFORM' &&
-            isRecordValid(row.Valid_From, row.Valid_Till)) {
-          regFormUrl = row.Content;
-        }
-      });
-      
-      return {
-        success: true,
-        registered: false,
-        registrationUrl: regFormUrl
-      };
-    }
-    
-  } catch (error) {
-    Logger.log('verifyEmail error: ' + error.toString());
-    return {
-      success: false,
-      message: 'Error verifying email'
-    };
-  }
-}
-
-/**
- * Get valid requests for a program
- * @param {string} program - Program name
- * @returns {Object} Response with request list
- */
-function getRequests(program) {
-  try {
-    if (!program) {
-      return {
-        success: false,
-        message: 'Program is required'
-      };
-    }
-    
-    const masterData = getMasterSheetData();
-    const requests = [];
-    
-    // Filter for valid REQUEST records for this program
-    masterData.forEach(row => {
-      if (row.Group === program && 
-          row.Record_Type === 'REQUEST' &&
-          isRecordValid(row.Valid_From, row.Valid_Till)) {
-        requests.push(row.Record_Name);
-      }
-    });
-    
-    return {
-      success: true,
-      requests: requests
-    };
-    
-  } catch (error) {
-    Logger.log('getRequests error: ' + error.toString());
-    return {
-      success: false,
-      message: 'Error loading requests'
-    };
-  }
-}
-
-/**
- * Submit a request
- * @param {string} program - Program name
- * @param {string} email - User email
- * @param {Array} requests - Array of selected requests
- * @param {string} recaptchaToken - reCAPTCHA token
- * @returns {Object} Response with submission result
- */
-function submitRequest(program, email, requests, recaptchaToken) {
-  try {
-    // Validate inputs
-    if (!program || !email || !requests || requests.length === 0) {
-      return {
-        success: false,
-        message: 'All fields are required'
-      };
-    }
-    
-    // Verify reCAPTCHA
-    if (!verifyRecaptcha(recaptchaToken)) {
-      Logger.log('reCAPTCHA verification failed for: ' + email);
-      return {
-        success: false,
-        message: 'Security verification failed. Please try again.'
-      };
-    }
-    
-    // Append to output sheet
-    const outputSheet = SpreadsheetApp.getActiveSpreadsheet()
-      .getSheetByName(CONFIG.OUTPUT_SHEET_NAME);
-    
-    if (!outputSheet) {
-      throw new Error(`Output sheet '${CONFIG.OUTPUT_SHEET_NAME}' not found`);
-    }
-    
-    // Prepare row data
-    const timestamp = new Date();
-    const requestsText = requests.join(', ');
-    
-    // Append row: [Timestamp, Program, Email, Requests]
-    outputSheet.appendRow([
-      timestamp,
-      program,
-      email,
-      requestsText
-    ]);
-    
-    return {
-      success: true,
-      message: 'Request submitted successfully'
-    };
-    
-  } catch (error) {
-    Logger.log('submitRequest error: ' + error.toString());
-    return {
-      success: false,
-      message: 'Error submitting request'
-    };
-  }
-}
-
-// ========================================
-// HELPER FUNCTIONS
-// ========================================
+// Old handler functions removed - see new handleGetPrograms, handleVerifyEmail, etc. above
 
 /**
  * Extract Google Sheet ID from URL
