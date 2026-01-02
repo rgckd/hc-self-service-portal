@@ -13,11 +13,7 @@
 // ========================================
 
 const CONFIG = {
-  // Google Sheets IDs
-  MASTER_SHEET_ID: 'YOUR_MASTER_SHEET_ID', // Portal MASTER Sheet
-  OUTPUT_SHEET_ID: 'YOUR_OUTPUT_SHEET_ID', // Requests Output Sheet
-  
-  // Sheet names
+  // Sheet names (Apps Script is bound to the spreadsheet containing these sheets)
   MASTER_SHEET_NAME: 'Portal MASTER',
   OUTPUT_SHEET_NAME: 'Requests',
   
@@ -146,11 +142,11 @@ function isRecordValid(validFrom, validTill) {
  */
 function getMasterSheetData() {
   try {
-    const sheet = SpreadsheetApp.openById(CONFIG.MASTER_SHEET_ID)
+    const sheet = SpreadsheetApp.getActiveSpreadsheet()
       .getSheetByName(CONFIG.MASTER_SHEET_NAME);
     
     if (!sheet) {
-      throw new Error('Master sheet not found');
+      throw new Error(`Master sheet '${CONFIG.MASTER_SHEET_NAME}' not found`);
     }
     
     const data = sheet.getDataRange().getValues();
@@ -399,11 +395,11 @@ function submitRequest(program, email, requests, recaptchaToken) {
     }
     
     // Append to output sheet
-    const outputSheet = SpreadsheetApp.openById(CONFIG.OUTPUT_SHEET_ID)
+    const outputSheet = SpreadsheetApp.getActiveSpreadsheet()
       .getSheetByName(CONFIG.OUTPUT_SHEET_NAME);
     
     if (!outputSheet) {
-      throw new Error('Output sheet not found');
+      throw new Error(`Output sheet '${CONFIG.OUTPUT_SHEET_NAME}' not found`);
     }
     
     // Prepare row data
