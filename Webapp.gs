@@ -27,6 +27,18 @@ const CONFIG = {
 // ========================================
 
 /**
+ * Serve the HTML interface using Google Apps Script HTML Service
+ * This eliminates CORS issues by serving frontend and backend from the same origin
+ * @returns {HtmlOutput} The HTML interface
+ */
+function doGet(e) {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setWidth(100)
+    .setHeight(100)
+    .setSandboxMode(HtmlService.SandboxMode.IFRAME);
+}
+
+/**
  * Handle POST requests from the frontend
  * @param {Object} e - Event object containing request data
  * @returns {TextOutput} JSON response
