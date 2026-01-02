@@ -6,9 +6,9 @@
 // Configuration
 const CONFIG = {
     // Replace with your deployed Google Apps Script Web App URL
-    API_URL: 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbwd7Bas1fs-JoXlCWBca8ixqXVo9TRu56x2IIZl8xbrbvTqtcRCwCvP3K-iEgLCjxwGFw/exec',
     // Replace with your reCAPTCHA v3 Site Key
-    RECAPTCHA_SITE_KEY: 'YOUR_RECAPTCHA_SITE_KEY'
+    RECAPTCHA_SITE_KEY: '6Ld11zssAAAAAMa8hkYJHz1AWvXuUh_WIfad0zbT'
 };
 
 // State management
