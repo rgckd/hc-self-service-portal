@@ -6,7 +6,7 @@
 // Configuration
 const CONFIG = {
     // Replace with your deployed Google Apps Script Web App URL
-    API_URL: 'https://script.google.com/macros/s/AKfycbwd7Bas1fs-JoXlCWBca8ixqXVo9TRu56x2IIZl8xbrbvTqtcRCwCvP3K-iEgLCjxwGFw/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbwJ-WQD61TAqxxgA3vN6f-F8RQzQgJsYZTTK3_YdTd7dFqcMs7CwSz9he1ecZYjvMOsbg/exec',
     // Replace with your reCAPTCHA v3 Site Key
     RECAPTCHA_SITE_KEY: '6Ld11zssAAAAAMa8hkYJHz1AWvXuUh_WIfad0zbT'
 };
