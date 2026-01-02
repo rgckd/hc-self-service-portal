@@ -21,8 +21,8 @@ const CONFIG = {
   MASTER_SHEET_NAME: 'Portal MASTER',
   OUTPUT_SHEET_NAME: 'Requests',
   
-  // reCAPTCHA Secret Key
-  RECAPTCHA_SECRET: 'YOUR_RECAPTCHA_SECRET_KEY',
+  // reCAPTCHA Secret Key (stored in Script Properties for security)
+  // Set via: Project Settings > Script Properties > Add: RECAPTCHA_SECRET
   RECAPTCHA_THRESHOLD: 0.5 // Minimum score (0.0 to 1.0)
 };
 
@@ -184,9 +184,17 @@ function verifyRecaptcha(token) {
   }
   
   try {
+    // Get reCAPTCHA secret from Script Properties
+    const recaptchaSecret = PropertiesService.getScriptProperties().getProperty('RECAPTCHA_SECRET');
+    
+    if (!recaptchaSecret) {
+      Logger.log('RECAPTCHA_SECRET not found in Script Properties');
+      return false;
+    }
+    
     const url = 'https://www.google.com/recaptcha/api/siteverify';
     const payload = {
-      secret: CONFIG.RECAPTCHA_SECRET,
+      secret: recaptchaSecret,
       response: token
     };
     
