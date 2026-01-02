@@ -33,9 +33,20 @@ const CONFIG = {
  */
 function doPost(e) {
   try {
-    // Parse request body
-    const requestData = JSON.parse(e.postData.contents);
-    const action = requestData.action;
+    // Check for honeypot (anti-spam)
+    if (e.parameter.honey && e.parameter.honey.length > 0) {
+      Logger.log('Honeypot triggered');
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: false,
+          message: 'Submission blocked'
+        }))
+        .setMimeType(ContentService.MimeType.JSON)
+        .addHeader('Access-Control-Allow-Origin', '*');
+    }
+    
+    // Get action from form parameters
+    const action = e.parameter.action;
     
     // Route to appropriate handler
     let response;
@@ -46,19 +57,22 @@ function doPost(e) {
         break;
         
       case 'verifyEmail':
-        response = verifyEmail(requestData.program, requestData.email);
+        response = verifyEmail(e.parameter.program, e.parameter.email);
         break;
         
       case 'getRequests':
-        response = getRequests(requestData.program);
+        response = getRequests(e.parameter.program);
         break;
         
       case 'submitRequest':
+        // Handle multiple requests array
+        const requests = e.parameter.requests;
+        const requestsArray = Array.isArray(requests) ? requests : [requests];
         response = submitRequest(
-          requestData.program,
-          requestData.email,
-          requestData.requests,
-          requestData.recaptchaToken
+          e.parameter.program,
+          e.parameter.email,
+          requestsArray,
+          e.parameter.recaptchaToken
         );
         break;
         

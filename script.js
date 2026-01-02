@@ -310,12 +310,27 @@ function getRecaptchaToken() {
  * Make API call to Google Apps Script backend
  */
 async function makeAPICall(payload) {
+    // Convert payload to FormData
+    const fd = new FormData();
+    
+    // Handle arrays specially
+    if (payload.requests && Array.isArray(payload.requests)) {
+        payload.requests.forEach(req => fd.append('requests', req));
+    }
+    
+    // Add other payload items
+    Object.keys(payload).forEach(key => {
+        if (key !== 'requests') {
+            fd.append(key, payload[key]);
+        }
+    });
+    
+    // Add honeypot field
+    fd.append('honey', '');
+    
     const response = await fetch(CONFIG.API_URL, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        body: fd
     });
 
     if (!response.ok) {
