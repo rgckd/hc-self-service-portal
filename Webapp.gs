@@ -14,8 +14,8 @@
 
 const CONFIG = {
   // Sheet names (Apps Script is bound to the spreadsheet containing these sheets)
-  MASTER_SHEET_NAME: 'Portal MASTER',
-  OUTPUT_SHEET_NAME: 'Requests',
+  MASTER_SHEET_NAME: 'MASTER',
+  OUTPUT_SHEET_NAME: 'NewPortalRequests',
   
   // reCAPTCHA Secret Key (stored in Script Properties for security)
   // Set via: Project Settings > Script Properties > Add: RECAPTCHA_SECRET

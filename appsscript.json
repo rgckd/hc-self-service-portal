@@ -1,0 +1,14 @@
+{
+  "timeZone": "Asia/Kolkata",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "dependencies": {
+    "libraries": [
+      {
+        "userSymbol": "HCParticipantsSelfServiceScripts",
+        "libraryId": "1cI1M3zJkQUdZwYNjXUvB2FfIw4Ey8KNXQvxxjMhpRqzsJwzQVtLOaA7l",
+        "version": "39"
+      }
+    ]
+  }
+}
