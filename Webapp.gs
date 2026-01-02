@@ -32,7 +32,7 @@ const CONFIG = {
  * @returns {HtmlOutput} The HTML interface
  */
 function doGet(e) {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('HC Self-Service Portal')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
