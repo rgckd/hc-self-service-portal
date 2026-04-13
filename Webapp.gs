@@ -315,32 +315,138 @@ function handleSubmitRequest(program, email, requests, recaptchaToken) {
  * @returns {boolean} True if record is currently valid
  */
 function isRecordValid(validFrom, validTill) {
-  // Get current date (normalized to midnight)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  // Check Valid_From
-  if (validFrom) {
-    const fromDate = new Date(validFrom);
-    fromDate.setHours(0, 0, 0, 0);
-    
-    if (fromDate > today) {
-      return false; // Not yet valid
-    }
+  const today = normalizeDateValue(new Date());
+
+  const hasValidFrom = hasDateValue(validFrom);
+  const hasValidTill = hasDateValue(validTill);
+
+  const fromDate = normalizeDateValue(validFrom);
+  const tillDate = normalizeDateValue(validTill);
+
+  // Fail closed for non-empty but invalid dates to avoid showing stale programs.
+  if (hasValidFrom && !fromDate) {
+    Logger.log('Invalid Valid_From value: ' + validFrom);
+    return false;
   }
-  
-  // Check Valid_Till
-  if (validTill) {
-    const tillDate = new Date(validTill);
-    tillDate.setHours(0, 0, 0, 0);
-    
-    if (tillDate < today) {
-      return false; // No longer valid
-    }
+
+  if (hasValidTill && !tillDate) {
+    Logger.log('Invalid Valid_Till value: ' + validTill);
+    return false;
   }
-  
-  // If both checks passed (or fields were blank), record is valid
+
+  if (fromDate && fromDate > today) {
+    return false; // Not yet valid
+  }
+
+  if (tillDate && tillDate < today) {
+    return false; // No longer valid
+  }
+
   return true;
+}
+
+/**
+ * Returns true only when the field contains a non-empty value.
+ * @param {*} value - Raw value from sheet cell
+ * @returns {boolean}
+ */
+function hasDateValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    return value.trim() !== '';
+  }
+  return true;
+}
+
+/**
+ * Normalize supported date inputs to local midnight Date.
+ * Supports Date objects, ISO, dd/mm/yyyy, dd-mm-yyyy, and dd-MMM-yyyy.
+ * @param {*} value - Raw value from sheet cell
+ * @returns {Date|null} Normalized Date or null when invalid/blank
+ */
+function normalizeDateValue(value) {
+  if (!hasDateValue(value)) {
+    return null;
+  }
+
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  if (typeof value === 'number' && isFinite(value)) {
+    // Support sheet serial dates if they arrive as numbers.
+    const serialEpochOffset = 25569;
+    const millisPerDay = 86400000;
+    const parsedFromSerial = new Date(Math.round((value - serialEpochOffset) * millisPerDay));
+    if (!isNaN(parsedFromSerial.getTime())) {
+      return new Date(parsedFromSerial.getFullYear(), parsedFromSerial.getMonth(), parsedFromSerial.getDate());
+    }
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const dateText = value.trim();
+  if (!dateText) {
+    return null;
+  }
+
+  let match = dateText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    return buildSafeDate(Number(match[1]), Number(match[2]), Number(match[3]));
+  }
+
+  match = dateText.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (match) {
+    return buildSafeDate(Number(match[3]), Number(match[2]), Number(match[1]));
+  }
+
+  match = dateText.match(/^(\d{1,2})[\s-]([A-Za-z]{3,})[\s-](\d{4})$/);
+  if (match) {
+    const monthMap = {
+      jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+      jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12
+    };
+    const month = monthMap[match[2].toLowerCase()];
+    if (!month) {
+      return null;
+    }
+    return buildSafeDate(Number(match[3]), month, Number(match[1]));
+  }
+
+  // Fallback for compatible formats.
+  const fallback = new Date(dateText);
+  if (!isNaN(fallback.getTime())) {
+    return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+  }
+
+  return null;
+}
+
+/**
+ * Build a Date safely and reject roll-over values (e.g. 31-Feb).
+ * @param {number} year - Four digit year
+ * @param {number} month - Month number (1-12)
+ * @param {number} day - Day number
+ * @returns {Date|null}
+ */
+function buildSafeDate(year, month, day) {
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const candidate = new Date(year, month - 1, day);
+  if (candidate.getFullYear() !== year ||
+      candidate.getMonth() !== month - 1 ||
+      candidate.getDate() !== day) {
+    return null;
+  }
+
+  return candidate;
 }
 
 /**
